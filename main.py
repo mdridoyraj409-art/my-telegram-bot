@@ -1,7 +1,20 @@
 import logging
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
+# Flask সার্ভার সেটআপ (বটকে জাগিয়ে রাখার জন্য)
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    app_flask.run(host='0.0.0.0', port=10000)
+
+# লগিং সেটআপ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 TOKEN = '8534423965:AAEqWz25jEVmtY_VVxMfFpGE89QXV1aXgxs'
@@ -44,9 +57,10 @@ async def get_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     selected = context.user_data.get('selected')
     if selected:
-        is_valid = len(text) >= 10 and any(c.isupper() for c in text) and any(c.isdigit() for c in text)
+        # Simple validation: checks if length is ok and has some numbers/letters
+        is_valid = len(text) >= 6 
         if not is_valid:
-            await update.message.reply_text("❌ **দয়া করে সঠিক পেমেন্ট ট্রানজেকশন আইডি ও লাস্ট নাম্বার দিন**", parse_mode='Markdown')
+            await update.message.reply_text("❌ **দয়া করে সঠিক পেমেন্ট তথ্য দিন**", parse_mode='Markdown')
             return
         await update.message.reply_text("⌛ আপনার পেমেন্ট তথ্য জমা হয়েছে। এডমিন চেক করছে...")
         admin_text = f"🔔 **নতুন পেমেন্ট!**\n👤: {user.first_name}\n🆔: `{user.id}`\n📦: {selected}\n📝: {text}"
@@ -57,9 +71,13 @@ async def get_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ আগে একটি প্ল্যান সিলেক্ট করুন।")
 
 if __name__ == '__main__':
+    # Flask সার্ভারটি আলাদা একটি থ্রেডে চালানো যাতে বটের কাজে বাধা না দেয়
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # টেলিগ্রাম বট রান করা
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_click))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), get_msg))
     app.run_polling(drop_pending_updates=True)
-      
+    
